@@ -1,53 +1,46 @@
 import re
 import pandas as pd
 import numpy as np
+from dateutil import parser
 
 def preprocess(data):
-    # Step 2: Regular expression pattern to extract datetime and message
-    pattern = r'(\d{1,2}/\d{1,2}/\d{2}), (\d{1,2}:\d{2}\s?[AP]M) - (.*?)(?=(?:\n\d{1,2}/\d{1,2}/\d{2}, \d{1,2}:\d{2}\s?[AP]M -)|\Z)'
+    # Improved regex: works for both 12-hour and 24-hour formats
+    pattern = r'(\d{1,2}/\d{1,2}/\d{2,4}), (\d{1,2}:\d{2}(?:\s?[APMapm]{2})?) - (.*?)(?=(?:\n\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2}(?:\s?[APMapm]{2})? -)|\Z)'
 
-    # Step 3: Find all messages
     matches = re.findall(pattern, data, re.DOTALL)
 
-    # Step 4: Store extracted messages
     message_list = []
 
     for date, time, message in matches:
         datetime_str = f"{date}, {time}"
-        message_cleaned = message.strip()
-        
-        # Print output
-        # print(f" DateTime: {datetime_str}")
-        # print(f" Message: {message_cleaned}")
-        # print("-" * 60)
-        
-        # Add to list for DataFrame
+        try:
+            dt = parser.parse(datetime_str)  # Smart datetime parser
+        except:
+            dt = None  # Fail-safe if parsing fails
+
         message_list.append({
-            "datetime": datetime_str,
-            "message": message_cleaned
+            "datetime": dt,
+            "message": message.strip()
         })
 
-    # Step 5: Convert to DataFrame
     df = pd.DataFrame(message_list)
 
-    # Step 6: Optional – convert to datetime object
-    df["datetime"] = pd.to_datetime(df["datetime"], format="%m/%d/%y, %I:%M %p")
+    # Drop messages with bad datetime
+    df.dropna(subset=["datetime"], inplace=True)
 
-    # Function to split name and message if ":" exists
+    # Split sender and text
     def split_sender_message(msg):
         if ": " in msg:
             name, text = msg.split(": ", 1)
             return name.strip(), text.strip()
         else:
-            # System message or deleted message
             return np.nan, msg.strip()
 
-    # Apply function to each row
     df[["name", "text"]] = df["message"].apply(lambda x: pd.Series(split_sender_message(x)))
-
-    df = df.rename(columns={'name':'users'})
+    df = df.rename(columns={'name': 'users'})
     df = df.fillna('unknown')
 
+    # Add additional time-based features
     df['year'] = df['datetime'].dt.year
     df['month_num'] = df['datetime'].dt.month
     df['month'] = df['datetime'].dt.month_name()
@@ -57,19 +50,15 @@ def preprocess(data):
     df['only_date'] = df['datetime'].dt.date
     df['day_name'] = df['datetime'].dt.day_name()
 
+    # Period mapping (for heatmap)
     period = []
-    for hour in df[['day_name','hour']]['hour']:
+    for hour in df['hour']:
         if hour == 23:
-            period.append(str(hour) + "-" + str('00'))
+            period.append(f"{hour}-00")
         elif hour == 0:
-            period.append(str('00') + "-" + str(hour+1))
+            period.append("00-1")
         else:
-            period.append(str(hour) + "-" + str(hour+1))
+            period.append(f"{hour}-{hour+1}")
     df['period'] = period
+
     return df
-
-
-
-
-
-    
