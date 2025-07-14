@@ -135,8 +135,9 @@ if uploaded_file is not None:
     with col1:
         st.dataframe(emoji_df)
     with col2:
-        fig, ax = plt.subplots()
-        ax.pie(emoji_df.iloc[:, 1].head(), labels=emoji_df.iloc[:, 0].head(), autopct="%0.2f%%")
-
-
-        st.pyplot(fig)
+        if not emoji_df.empty and emoji_df.shape[1] >= 2:
+            fig, ax = plt.subplots()
+            ax.pie(emoji_df.iloc[:5, 1], labels=emoji_df.iloc[:5, 0])
+            st.pyplot(fig)
+        else:
+            st.warning("No emojis found to display in pie chart.")
